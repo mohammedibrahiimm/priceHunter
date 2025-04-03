@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from routes import router
 import joblib
 import sqlite3
 import os
@@ -19,7 +20,8 @@ def get_db_connection():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)  
     conn.row_factory = sqlite3.Row
     return conn  
-
+app.include_router(router) #routes.py
+ 
 class Item(BaseModel):
     type: str
     color: str
