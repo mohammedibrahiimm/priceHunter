@@ -1,27 +1,30 @@
 from fastapi import FastAPI
-from routes import router
 import joblib
 import sqlite3
 import os
 from pydantic import BaseModel
 import uvicorn
 
+# ✅ الحصول على مسارات الملفات بطريقة متوافقة مع Railway
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
 ENCODERS_PATH = os.path.join(BASE_DIR, "encoders.pkl")
 DB_PATH = os.path.join(BASE_DIR, "clothing_db.sqlite")
 
+# ✅ تحميل الموديل والمشفرات
 model = joblib.load(MODEL_PATH)
 encoders = joblib.load(ENCODERS_PATH)
 
+# ✅ إنشاء API
 app = FastAPI()
 
+# ✅ الاتصال بقاعدة البيانات
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)  
     conn.row_factory = sqlite3.Row
     return conn  
-app.include_router(router) #routes.py
- 
+
+# ✅ نموذج البيانات
 class Item(BaseModel):
     type: str
     color: str
@@ -30,6 +33,7 @@ class Item(BaseModel):
     style: str
     state: str
 
+# ✅ دالة البحث عن السعر في قاعدة البيانات
 def get_price_from_db(item: Item):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -46,6 +50,7 @@ def get_price_from_db(item: Item):
         return sum(prices) / len(prices)  
     return None
 
+# ✅ إنشاء API Endpoint
 @app.post("/predict_price/")
 async def predict_price(item: Item):
     dataset_price = get_price_from_db(item)
@@ -69,5 +74,6 @@ async def predict_price(item: Item):
     
     return {"predicted_price": predicted_price, "source": "model"}
 
+# ✅ تشغيل التطبيق على Railway
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
