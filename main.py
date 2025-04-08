@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware  # ✅ import CORS middleware
 import joblib
 import sqlite3
 import os
@@ -17,6 +18,15 @@ encoders = joblib.load(ENCODERS_PATH)
 
 # ✅ إنشاء API
 app = FastAPI()
+
+# ✅ إعدادات CORS علشان تشتغل مع React
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # لو شغلك في بيئة تانية زود الرابط هنا
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ✅ الاتصال بقاعدة البيانات
 def get_db_connection():
