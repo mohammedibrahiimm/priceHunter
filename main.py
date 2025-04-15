@@ -6,35 +6,35 @@ import os
 from pydantic import BaseModel
 import uvicorn
 
-# ✅ الحصول على مسارات الملفات بطريقة متوافقة مع Railway
+# Getting file paths in a way compatible with Railway
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
 ENCODERS_PATH = os.path.join(BASE_DIR, "encoders.pkl")
 DB_PATH = os.path.join(BASE_DIR, "clothing_db.sqlite")
 
-# ✅ تحميل الموديل والمشفرات
+# Loading the model and encoders
 model = joblib.load(MODEL_PATH)
 encoders = joblib.load(ENCODERS_PATH)
 
-# ✅ إنشاء API
+# Creating the API
 app = FastAPI()
 
-# ✅ إعدادات CORS علشان تشتغل مع React
+# CORS settings to work with React
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # لو شغلك في بيئة تانية زود الرابط هنا
+    allow_origins=["http://localhost:5173"],  # Add your link here if working in a different environment
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ✅ الاتصال بقاعدة البيانات
+# Connecting to the database
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
-# ✅ نموذج البيانات
+# Data model
 class Item(BaseModel):
     type: str
     color: str
@@ -43,7 +43,7 @@ class Item(BaseModel):
     style: str
     state: str
 
-# ✅ دالة البحث عن السعر في قاعدة البيانات
+# Function to search for price in the database
 def get_price_from_db(item: Item):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -60,12 +60,12 @@ def get_price_from_db(item: Item):
         return sum(prices) / len(prices)
     return None
 
-# ✅ Endpoint التنبؤ بالسعر مع رابط بحث أمازون
+# Endpoint for price prediction with Amazon search link
 @app.post("/predict_price/")
 async def predict_price(item: Item):
     dataset_price = get_price_from_db(item)
 
-    # ⛓️ تكوين رابط بحث أمازون
+    # ⛓️ Creating Amazon search link
     search_query = f"{item.brand} {item.color} {item.material} {item.style} {item.type}"
     amazon_search_url = f"https://www.amazon.com/s?k={search_query.replace(' ', '+')}"
 
@@ -96,6 +96,6 @@ async def predict_price(item: Item):
         "product_search_url": amazon_search_url
     }
 
-# ✅ تشغيل التطبيق على Railway
+# Running the application on Railway
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
