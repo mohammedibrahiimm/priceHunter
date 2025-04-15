@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware  # ✅ import CORS middleware
+from fastapi.middleware.cors import CORSMiddleware
 import joblib
 import sqlite3
 import os
@@ -30,9 +30,9 @@ app.add_middleware(
 
 # ✅ الاتصال بقاعدة البيانات
 def get_db_connection():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)  
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
-    return conn  
+    return conn
 
 # ✅ نموذج البيانات
 class Item(BaseModel):
@@ -57,17 +57,25 @@ def get_price_from_db(item: Item):
 
     if result:
         prices = [row['price'] for row in result]
-        return sum(prices) / len(prices)  
+        return sum(prices) / len(prices)
     return None
 
-# ✅ إنشاء API Endpoint
+# ✅ Endpoint التنبؤ بالسعر مع رابط بحث أمازون
 @app.post("/predict_price/")
 async def predict_price(item: Item):
     dataset_price = get_price_from_db(item)
-    
+
+    # ⛓️ تكوين رابط بحث أمازون
+    search_query = f"{item.brand} {item.color} {item.material} {item.style} {item.type}"
+    amazon_search_url = f"https://www.amazon.com/s?k={search_query.replace(' ', '+')}"
+
     if dataset_price is not None:
-        return {"predicted_price": dataset_price, "source": "database"}
-    
+        return {
+            "predicted_price": dataset_price,
+            "source": "database",
+            "product_search_url": amazon_search_url
+        }
+
     try:
         input_data = [
             encoders['type'].transform([item.type.lower()])[0],
@@ -77,12 +85,16 @@ async def predict_price(item: Item):
             encoders['style'].transform([item.style.lower()])[0],
             encoders['state'].transform([item.state.lower()])[0]
         ]
-    except Exception as e:  
+    except Exception as e:
         return {"error": f"Invalid value: {str(e)}"}
-    
+
     predicted_price = model.predict([input_data])[0]
-    
-    return {"predicted_price": predicted_price, "source": "model"}
+
+    return {
+        "predicted_price": predicted_price,
+        "source": "model",
+        "product_search_url": amazon_search_url
+    }
 
 # ✅ تشغيل التطبيق على Railway
 if __name__ == "__main__":
