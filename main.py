@@ -146,15 +146,13 @@ async def predict_price(item: Item):
             price_diff = abs(predicted_price - price_from_url)
             if price_diff < 10:  # فرق السعر مسموح به (مثلاً أقل من 10 دولارات)
                 return {
-                    "predicted_price": predicted_price,
-                    "source": "model",
+                    "Range_predicted_price": predicted_price,
                     "product_url": product_url,
-                    "price_diff": price_diff
+                    "amount saved": price_diff
                 }
 
     return {
-        "predicted_price": predicted_price,
-        "source": "model",
+        "ٌRange_predicted_price": predicted_price,
         "product_url": product_url
     }
 
