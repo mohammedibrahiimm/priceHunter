@@ -3,10 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 import joblib
 import sqlite3
 import os
+import requests
 from pydantic import BaseModel
 import uvicorn
 
-# ✅ الحصول على مسارات الملفات بطريقة متوافقة مع Railway
+# ⛓️ إعدادات المسارات
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
 ENCODERS_PATH = os.path.join(BASE_DIR, "encoders.pkl")
@@ -16,19 +17,17 @@ DB_PATH = os.path.join(BASE_DIR, "clothing_db.sqlite")
 model = joblib.load(MODEL_PATH)
 encoders = joblib.load(ENCODERS_PATH)
 
-# ✅ إنشاء API
+# ✅ إعداد FastAPI و CORS
 app = FastAPI()
-
-# ✅ إعدادات CORS علشان تشتغل مع React
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5174"],
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ✅ الاتصال بقاعدة البيانات
+# ✅ قاعدة البيانات
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
@@ -43,7 +42,7 @@ class Item(BaseModel):
     style: str
     state: str
 
-# ✅ دالة البحث عن السعر في قاعدة البيانات
+# ✅ البحث في قاعدة البيانات
 def get_price_from_db(item: Item):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -60,27 +59,50 @@ def get_price_from_db(item: Item):
         return sum(prices) / len(prices)
     return None
 
-# ✅ Endpoint التنبؤ بالسعر + رابط بحث مخصص حسب حالة المنتج
+# ✅ دالة جلب رابط منتج من Zenserp
+def search_product_zenserp(query: str, site: str = "amazon.com"):
+    url = "https://app.zenserp.com/api/v2/search"
+    params = {
+        "q": query,
+        "location": "United States",
+        "search_engine": "google.com",
+        "tbm": "shop",
+        "num": 5,
+        "domain": site,
+        "apikey": "3c0ce450-1c63-11f0-b37b-9f198730fcec"
+    }
+
+    response = requests.get(url, params=params)
+    if response.status_code == 200:
+        results = response.json()
+        if "shopping_results" in results:
+            sorted_results = sorted(results["shopping_results"], key=lambda x: float(x.get("price", "0").replace("$", "")))
+            return sorted_results[0]["link"] if sorted_results else None
+    return None
+
+# ✅ Endpoint رئيسي
 @app.post("/predict_price/")
 async def predict_price(item: Item):
     dataset_price = get_price_from_db(item)
 
-    # ⛓️ تكوين رابط البحث حسب الحالة
     search_query = f"{item.brand} {item.color} {item.material} {item.style} {item.type}"
     state = item.state.lower()
+    product_url = None
 
     if state == "new":
-        product_search_url = f"https://www.amazon.com/s?k={search_query.replace(' ', '+')}"
+        # بحث في أمازون وشين
+        amazon_link = search_product_zenserp(search_query, site="amazon.com")
+        shein_link = search_product_zenserp(search_query, site="shein.com")
+        product_url = amazon_link or shein_link
     elif state == "used":
-        product_search_url = f"https://www.ebay.com/sch/i.html?_nkw={search_query.replace(' ', '+')}"
-    else:
-        product_search_url = "https://www.google.com"  # fallback لو الحالة مش معروفة
+        # بحث في eBay
+        product_url = search_product_zenserp(search_query, site="ebay.com")
 
     if dataset_price is not None:
         return {
             "predicted_price": dataset_price,
             "source": "database",
-            "product_search_url": product_search_url
+            "product_url": product_url
         }
 
     try:
@@ -100,9 +122,9 @@ async def predict_price(item: Item):
     return {
         "predicted_price": predicted_price,
         "source": "model",
-        "product_search_url": product_search_url
+        "product_url": product_url
     }
 
-# ✅ تشغيل التطبيق على Railway
+# ✅ لتشغيل التطبيق
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
