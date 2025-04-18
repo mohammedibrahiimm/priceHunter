@@ -97,15 +97,16 @@ async def predict_price(item: Item):
     shein_link = f"https://www.shein.com/search?q={query_encoded}"
     ebay_link = f"https://www.ebay.com/sch/i.html?_nkw={query_encoded}"
 
+    # 🧠 روابط المنتجات
     product_urls = {
         "lowest_price_link": get_lowest_price_link(search_query),
         "amazon_search_link": amazon_link,
-        "shein_search_link": shein_link if state == "new" else None,
     }
 
-    if state == "used":
+    if state == "new":
+        product_urls["shein_search_link"] = shein_link
+    elif state == "used":
         product_urls["ebay_search_link"] = ebay_link
-
 
     if dataset_price is not None:
         return {
