@@ -60,95 +60,70 @@ def get_price_from_db(item: Item):
     return None
 
 # ✅ دالة جلب رابط منتج من Zenserp
-def search_product_zenserp(query: str, site: str = None):
-    try:
-        url = "https://app.zenserp.com/api/v2/search"
-        params = {
-            "q": query,
-            "location": "United States",
-            "search_engine": "google.com",
-            "tbm": "shop",
-            "num": 5,
-            "apikey": "3c0ce450-1c63-11f0-b37b-9f198730fcec"
-        }
-        if site:
-            params["domain"] = site
+def search_product_zenserp(query: str, site: str = "amazon.com"):
+    url = "https://app.zenserp.com/api/v2/search"
+    params = {
+        "q": query,
+        "location": "United States",
+        "search_engine": "google.com",
+        "tbm": "shop",
+        "num": 5,
+        "domain": site,
+        "apikey": "3c0ce450-1c63-11f0-b37b-9f198730fcec"
+    }
 
-        response = requests.get(url, params=params)
-        response.raise_for_status()
+    response = requests.get(url, params=params)
+    if response.status_code == 200:
         results = response.json()
-
         if "shopping_results" in results:
-            filtered_results = [
-                r for r in results["shopping_results"]
-                if "goinggoinggone" not in r.get("link", "").lower()
-            ]
-            sorted_results = sorted(filtered_results, key=lambda x: float(x.get("price", "0").replace("$", "")))
-            return sorted_results[0] if sorted_results else None
-    except Exception as e:
-        return None
+            sorted_results = sorted(results["shopping_results"], key=lambda x: float(x.get("price", "0").replace("$", "")))
+            return sorted_results[0]["link"] if sorted_results else None
     return None
 
 # ✅ Endpoint رئيسي
 @app.post("/predict_price/")
 async def predict_price(item: Item):
     dataset_price = get_price_from_db(item)
+
     search_query = f"{item.brand} {item.color} {item.material} {item.style} {item.type}"
     state = item.state.lower()
-
-    cheapest_product = None
-    amazon_product = None
-    shein_product = None
-    ebay_product = None
+    product_url = None
 
     if state == "new":
-        amazon_product = search_product_zenserp(search_query, site="amazon.com")
-        shein_product = search_product_zenserp(search_query, site="shein.com")
-        candidates = [p for p in [amazon_product, shein_product] if p is not None]
+        # بحث في أمازون وشين
+        amazon_link = search_product_zenserp(search_query, site="amazon.com")
+        shein_link = search_product_zenserp(search_query, site="shein.com")
+        product_url = amazon_link or shein_link
     elif state == "used":
-        ebay_product = search_product_zenserp(search_query, site="ebay.com")
-        candidates = [ebay_product] if ebay_product else []
+        # بحث في eBay
+        product_url = search_product_zenserp(search_query, site="ebay.com")
 
-    # اختيار أرخص منتج
-    if candidates:
-        cheapest_product = min(
-            candidates,
-            key=lambda x: float(x.get("price", "0").replace("$", ""))
-        )
+    if dataset_price is not None:
+        return {
+            "predicted_price": dataset_price,
+            "source": "database",
+            "product_url": product_url
+        }
 
-    result = {
-        "predicted_price": dataset_price if dataset_price else None,
-        "source": "database" if dataset_price else "model",
-        "product_url": cheapest_product
+    try:
+        input_data = [
+            encoders['type'].transform([item.type.lower()])[0],
+            encoders['color'].transform([item.color.lower()])[0],
+            encoders['brand'].transform([item.brand.lower()])[0],
+            encoders['material'].transform([item.material.lower()])[0],
+            encoders['style'].transform([item.style.lower()])[0],
+            encoders['state'].transform([item.state.lower()])[0]
+        ]
+    except Exception as e:
+        return {"error": f"Invalid value: {str(e)}"}
+
+    predicted_price = model.predict([input_data])[0]
+
+    return {
+        "predicted_price": predicted_price,
+        "source": "model",
+        "product_url": product_url
     }
-
-    # إضافة روابط إضافية حسب الحالة
-    if state == "new":
-        if amazon_product:
-            result["amazon_url"] = amazon_product.get("link")
-        if shein_product:
-            result["shein_url"] = shein_product.get("link")
-    elif state == "used":
-        if ebay_product:
-            result["ebay_url"] = ebay_product.get("link")
-
-    # تنبؤ بالسعر في حالة عدم وجوده في قاعدة البيانات
-    if not dataset_price:
-        try:
-            input_data = [
-                encoders['type'].transform([item.type.lower()])[0],
-                encoders['color'].transform([item.color.lower()])[0],
-                encoders['brand'].transform([item.brand.lower()])[0],
-                encoders['material'].transform([item.material.lower()])[0],
-                encoders['style'].transform([item.style.lower()])[0],
-                encoders['state'].transform([item.state.lower()])[0]
-            ]
-            predicted_price = model.predict([input_data])[0]
-            result["predicted_price"] = predicted_price
-        except Exception as e:
-            result["error"] = f"Invalid value: {str(e)}"
-
-    return result
 
 # ✅ لتشغيل التطبيق
 if __name__ == "__main__":
