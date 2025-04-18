@@ -7,17 +7,17 @@ import requests
 from pydantic import BaseModel
 import uvicorn
 
-# ⛓️ إعدادات المسارات
+# إعدادات المسارات
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
 ENCODERS_PATH = os.path.join(BASE_DIR, "encoders.pkl")
 DB_PATH = os.path.join(BASE_DIR, "clothing_db.sqlite")
 
-# ✅ تحميل الموديل والمشفرات
+# تحميل الموديل والمشفرات
 model = joblib.load(MODEL_PATH)
 encoders = joblib.load(ENCODERS_PATH)
 
-# ✅ إعداد FastAPI و CORS
+# إعداد FastAPI و CORS
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
@@ -27,13 +27,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ✅ قاعدة البيانات
+# قاعدة البيانات
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
-# ✅ نموذج البيانات
+# نموذج البيانات
 class Item(BaseModel):
     type: str
     color: str
@@ -42,7 +42,7 @@ class Item(BaseModel):
     style: str
     state: str
 
-# ✅ البحث في قاعدة البيانات
+# البحث في قاعدة البيانات
 def get_price_from_db(item: Item):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -59,113 +59,93 @@ def get_price_from_db(item: Item):
         return sum(prices) / len(prices)
     return None
 
-# ✅ دالة للبحث في مواقع متعددة وجلب النتائج
-def search_multiple_products(query: str, sites: list):
-    all_results = []
+# Zenserp search
+def search_product_zenserp(query: str, site: str = None):
+    url = "https://app.zenserp.com/api/v2/search"
+    params = {
+        "q": query,
+        "location": "United States",
+        "search_engine": "google.com",
+        "tbm": "shop",
+        "num": 5,
+        "apikey": "3c0ce450-1c63-11f0-b37b-9f198730fcec"
+    }
+    if site:
+        params["domain"] = site
 
-    for site in sites:
-        try:
-            print(f"🔍 Searching for: {query} on {site}")
-            url = "https://app.zenserp.com/api/v2/search"
-            params = {
-                "q": query,
-                "location": "United States",
-                "search_engine": "google.com",
-                "tbm": "shop",
-                "num": 5,
-                "domain": site,
-                "apikey": "3c0ce450-1c63-11f0-b37b-9f198730fcec"
-            }
-
-            response = requests.get(url, params=params)
-            response.raise_for_status()
-
+    try:
+        response = requests.get(url, params=params)
+        if response.status_code == 200:
             results = response.json()
             if "shopping_results" in results:
-                filtered = [
-                    r for r in results["shopping_results"]
-                    if "goinggoinggone" not in r.get("link", "").lower()
-                ]
-                all_results.extend(filtered)
-        except Exception as e:
-            print(f"❌ Error while searching {site}: {e}")
-
-    try:
-        sorted_results = sorted(
-            all_results,
-            key=lambda x: float(x.get("price", "0").replace("$", "").replace(",", ""))
-        )
-        return sorted_results
-    except Exception as e:
-        print(f"❌ Error while sorting results: {e}")
+                sorted_results = sorted(results["shopping_results"], key=lambda x: float(x.get("price", "0").replace("$", "")))
+                return sorted_results
+    except:
         return []
+    return []
 
-# ✅ Endpoint رئيسي
+# Endpoint رئيسي
 @app.post("/predict_price/")
 async def predict_price(item: Item):
-    try:
-        dataset_price = get_price_from_db(item)
-        search_query = f"{item.brand} {item.color} {item.material} {item.style} {item.type}"
-        state = item.state.lower()
+    dataset_price = get_price_from_db(item)
+    search_query = f"{item.brand} {item.color} {item.material} {item.style} {item.type}"
+    state = item.state.lower()
+    
+    # روابط المنتج
+    product_urls = {
+        "lowest_price_link": None,
+        "amazon_link": None,
+        "shein_link": None,
+        "ebay_link": None
+    }
 
-        cheapest_link = None
-        extra_links = {}
+    all_results = search_product_zenserp(search_query)
+    if all_results:
+        product_urls["lowest_price_link"] = all_results[0]["link"]
 
-        if state == "new":
-            results = search_multiple_products(search_query, ["amazon.com", "shein.com"])
-            if results:
-                cheapest_link = results[0].get("link")
-                for r in results:
-                    link = r.get("link", "")
-                    if "amazon" in link and "amazon_url" not in extra_links:
-                        extra_links["amazon_url"] = link
-                    elif "shein" in link and "shein_url" not in extra_links:
-                        extra_links["shein_url"] = link
+    if state == "new":
+        amazon_results = search_product_zenserp(search_query, site="amazon.com")
+        shein_results = search_product_zenserp(search_query, site="shein.com")
 
-        elif state == "used":
-            results = search_multiple_products(search_query, ["ebay.com"])
-            if results:
-                cheapest_link = results[0].get("link")
-                for r in results:
-                    link = r.get("link", "")
-                    if "ebay" in link and "ebay_url" not in extra_links:
-                        extra_links["ebay_url"] = link
+        if amazon_results:
+            product_urls["amazon_link"] = amazon_results[0]["link"]
+        if shein_results:
+            product_urls["shein_link"] = shein_results[0]["link"]
 
-        if dataset_price is not None:
-            return {
-                "predicted_price": dataset_price,
-                "source": "database",
-                "product_url": cheapest_link,
-                **extra_links
-            }
+    elif state == "used":
+        ebay_results = search_product_zenserp(search_query, site="ebay.com")
+        if ebay_results:
+            product_urls["ebay_link"] = ebay_results[0]["link"]
 
-        # Model prediction
-        try:
-            input_data = [
-                encoders['type'].transform([item.type.lower()])[0],
-                encoders['color'].transform([item.color.lower()])[0],
-                encoders['brand'].transform([item.brand.lower()])[0],
-                encoders['material'].transform([item.material.lower()])[0],
-                encoders['style'].transform([item.style.lower()])[0],
-                encoders['state'].transform([item.state.lower()])[0]
-            ]
-        except Exception as e:
-            print(f"❌ Encoding Error: {e}")
-            return {"error": f"Invalid value: {str(e)}"}
-
-        predicted_price = model.predict([input_data])[0]
-
+    # لو فيه سعر من قاعدة البيانات
+    if dataset_price is not None:
         return {
-            "predicted_price": predicted_price,
-            "source": "model",
-            "product_url": cheapest_link,
-            **extra_links
+            "predicted_price": dataset_price,
+            "source": "database",
+            "product_urls": product_urls
         }
 
+    # لو ما فيش داتابيز، تنبؤ من الموديل
+    try:
+        input_data = [
+            encoders['type'].transform([item.type.lower()])[0],
+            encoders['color'].transform([item.color.lower()])[0],
+            encoders['brand'].transform([item.brand.lower()])[0],
+            encoders['material'].transform([item.material.lower()])[0],
+            encoders['style'].transform([item.style.lower()])[0],
+            encoders['state'].transform([item.state.lower()])[0]
+        ]
     except Exception as e:
-        print(f"❌ General Error: {e}")
-        return {"error": f"Internal Server Error: {str(e)}"}
+        return {"error": f"Invalid value: {str(e)}"}
 
-# ✅ لتشغيل التطبيق
+    predicted_price = model.predict([input_data])[0]
+
+    return {
+        "predicted_price": predicted_price,
+        "source": "model",
+        "product_urls": product_urls
+    }
+
+# تشغيل التطبيق
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
