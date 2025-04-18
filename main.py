@@ -61,34 +61,41 @@ def get_price_from_db(item: Item):
 
 # ✅ دالة جلب رابط منتج من Zenserp
 def search_product_zenserp(query: str, site: str = "amazon.com"):
-    url = "https://app.zenserp.com/api/v2/search"
-    params = {
-        "q": query,
-        "location": "United States",
-        "search_engine": "google.com",
-        "tbm": "shop",
-        "num": 5,
-        "domain": site,
-        "apikey": "3c0ce450-1c63-11f0-b37b-9f198730fcec"
-    }
+    try:
+        url = "https://app.zenserp.com/api/v2/search"
+        params = {
+            "q": query,
+            "location": "United States",
+            "search_engine": "google.com",
+            "tbm": "shop",
+            "num": 5,
+            "domain": site,
+            "apikey": "3c0ce450-1c63-11f0-b37b-9f198730fcec"
+        }
 
-    response = requests.get(url, params=params)
-    if response.status_code == 200:
-        results = response.json()
-        if "shopping_results" in results:
-            sorted_results = sorted(results["shopping_results"], key=lambda x: float(x.get("price", "0").replace("$", "")))
-            return sorted_results[0] if sorted_results else None
+        response = requests.get(url, params=params)
+        response.raise_for_status()  # إظهار الخطأ في حالة فشل الاستجابة
+        if response.status_code == 200:
+            results = response.json()
+            if "shopping_results" in results:
+                sorted_results = sorted(results["shopping_results"], key=lambda x: float(x.get("price", "0").replace("$", "")))
+                return sorted_results[0] if sorted_results else None
+    except Exception as e:
+        return {"error": f"Error in Zenserp search: {str(e)}"}
     return None
 
 # ✅ دالة لتحليل السعر في الرابط
 def extract_price_from_url(url: str):
-    response = requests.get(url)
-    if response.status_code == 200:
-        # هنا يمكننا استخراج السعر من الرابط عن طريق تحليل الصفحة (مثال: باستخدام BeautifulSoup)
-        # ده مجرد placeholder: هنفترض إننا استخرجنا السعر بنجاح من الصفحة
-        price = 0.0  # سعر افتراضي
-        # تحليل الصفحة لاستخراج السعر الحقيقي سيحتاج مكتبة مثل BeautifulSoup
-        return price
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # إظهار الخطأ في حالة فشل الاستجابة
+        if response.status_code == 200:
+            # هنا يمكننا استخراج السعر من الرابط عن طريق تحليل الصفحة (مثال: باستخدام BeautifulSoup)
+            price = 0.0  # سعر افتراضي
+            # تحليل الصفحة لاستخراج السعر الحقيقي سيحتاج مكتبة مثل BeautifulSoup
+            return price
+    except Exception as e:
+        return {"error": f"Error extracting price from URL: {str(e)}"}
     return None
 
 # ✅ Endpoint رئيسي
@@ -135,7 +142,7 @@ async def predict_price(item: Item):
     # إذا وجدنا رابط من Zenserp، قارن السعر المتوقع مع السعر الذي وجدناه
     if product_url:
         price_from_url = extract_price_from_url(product_url)
-        if price_from_url:
+        if price_from_url and isinstance(price_from_url, float):
             price_diff = abs(predicted_price - price_from_url)
             if price_diff < 10:  # فرق السعر مسموح به (مثلاً أقل من 10 دولارات)
                 return {
@@ -144,7 +151,7 @@ async def predict_price(item: Item):
                     "product_url": product_url,
                     "price_diff": price_diff
                 }
-    
+
     return {
         "predicted_price": predicted_price,
         "source": "model",
