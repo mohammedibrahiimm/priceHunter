@@ -7,17 +7,14 @@ import requests
 from pydantic import BaseModel
 import uvicorn
 
-# ⛓️ إعدادات المسارات
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
 ENCODERS_PATH = os.path.join(BASE_DIR, "encoders.pkl")
 DB_PATH = os.path.join(BASE_DIR, "clothing_db.sqlite")
 
-# ✅ تحميل الموديل والمشفرات
 model = joblib.load(MODEL_PATH)
 encoders = joblib.load(ENCODERS_PATH)
 
-# ✅ إعداد FastAPI و CORS
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
@@ -27,13 +24,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ✅ قاعدة البيانات
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
-# ✅ نموذج البيانات
 class Item(BaseModel):
     type: str
     color: str
@@ -42,25 +37,21 @@ class Item(BaseModel):
     style: str
     state: str
 
-# ✅ البحث في قاعدة البيانات
 def get_price_from_db(item: Item):
     conn = get_db_connection()
     cursor = conn.cursor()
     query = '''SELECT price FROM clothing_items 
                WHERE type=? AND color=? AND brand=? AND material=? AND style=? AND state=?'''
-    
-    cursor.execute(query, (item.type.lower(), item.color.lower(), item.brand.lower(), 
+    cursor.execute(query, (item.type.lower(), item.color.lower(), item.brand.lower(),
                            item.material.lower(), item.style.lower(), item.state.lower()))
     result = cursor.fetchall()
     conn.close()
-
     if result:
         prices = [row['price'] for row in result]
         return sum(prices) / len(prices)
     return None
 
-# ✅ دالة جلب رابط منتج من Zenserp
-def search_product_zenserp(query: str, site: str = "amazon.com"):
+def search_product_zenserp(query: str, site: str):
     try:
         url = "https://app.zenserp.com/api/v2/search"
         params = {
@@ -74,57 +65,59 @@ def search_product_zenserp(query: str, site: str = "amazon.com"):
         }
 
         response = requests.get(url, params=params)
-        response.raise_for_status()  # إظهار الخطأ في حالة فشل الاستجابة
-        if response.status_code == 200:
-            results = response.json()
-            if "shopping_results" in results:
-                sorted_results = sorted(results["shopping_results"], key=lambda x: float(x.get("price", "0").replace("$", "")))
-                return sorted_results[0] if sorted_results else None
+        response.raise_for_status()
+        results = response.json()
+        if "shopping_results" in results:
+            sorted_results = sorted(
+                results["shopping_results"],
+                key=lambda x: float(x.get("price", "0").replace("$", ""))
+            )
+            return sorted_results[0] if sorted_results else None
     except Exception as e:
-        return {"error": f"Error in Zenserp search: {str(e)}"}
+        return None
     return None
 
-# ✅ دالة لتحليل السعر في الرابط
-def extract_price_from_url(url: str):
-    try:
-        response = requests.get(url)
-        response.raise_for_status()  # إظهار الخطأ في حالة فشل الاستجابة
-        if response.status_code == 200:
-            # هنا يمكننا استخراج السعر من الرابط عن طريق تحليل الصفحة (مثال: باستخدام BeautifulSoup)
-            price = 0.0  # سعر افتراضي
-            # تحليل الصفحة لاستخراج السعر الحقيقي سيحتاج مكتبة مثل BeautifulSoup
-            return price
-    except Exception as e:
-        return {"error": f"Error extracting price from URL: {str(e)}"}
-    return None
-
-# ✅ Endpoint رئيسي
 @app.post("/predict_price/")
 async def predict_price(item: Item):
     dataset_price = get_price_from_db(item)
-
     search_query = f"{item.brand} {item.color} {item.material} {item.style} {item.type}"
     state = item.state.lower()
-    product_url = None
+
+    product_links = {}
+    cheapest = None
 
     if state == "new":
-        # بحث في أمازون وشين
-        amazon_product = search_product_zenserp(search_query, site="amazon.com")
-        shein_product = search_product_zenserp(search_query, site="shein.com")
-        product_url = amazon_product or shein_product
-    elif state == "used":
-        # بحث في eBay
-        product_url = search_product_zenserp(search_query, site="ebay.com")
+        amazon = search_product_zenserp(search_query, site="amazon.com")
+        shein = search_product_zenserp(search_query, site="shein.com")
 
-    # إذا كانت البيانات موجودة في قاعدة البيانات
+        options = []
+        if amazon: options.append(amazon)
+        if shein: options.append(shein)
+
+        if options:
+            cheapest = min(options, key=lambda x: float(x.get("price", "0").replace("$", "")))
+
+        product_links = {
+            "cheapest_product": cheapest,
+            "amazon": amazon,
+            "shein": shein
+        }
+
+    elif state == "used":
+        ebay = search_product_zenserp(search_query, site="ebay.com")
+        cheapest = ebay  # في الحالة دي بيكون هو نفسه أرخص واحد
+        product_links = {
+            "cheapest_product": ebay,
+            "ebay": ebay
+        }
+
     if dataset_price is not None:
         return {
             "predicted_price": dataset_price,
             "source": "database",
-            "product_url": product_url
+            "product_urls": product_links
         }
 
-    # التنبؤ بالسعر من الموديل
     try:
         input_data = [
             encoders['type'].transform([item.type.lower()])[0],
@@ -139,23 +132,11 @@ async def predict_price(item: Item):
 
     predicted_price = model.predict([input_data])[0]
 
-    # إذا وجدنا رابط من Zenserp، قارن السعر المتوقع مع السعر الذي وجدناه
-    if product_url:
-        price_from_url = extract_price_from_url(product_url)
-        if price_from_url and isinstance(price_from_url, float):
-            price_diff = abs(predicted_price - price_from_url)
-            if price_diff < 10:  # فرق السعر مسموح به (مثلاً أقل من 10 دولارات)
-                return {
-                    "Range_predicted_price": predicted_price,
-                    "product_url": product_url,
-                    "amount saved": price_diff
-                }
-
     return {
-        "ٌRange_predicted_price": predicted_price,
-        "product_url": product_url
+        "predicted_price": predicted_price,
+        "source": "model",
+        "product_urls": product_links
     }
 
-# ✅ لتشغيل التطبيق
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
