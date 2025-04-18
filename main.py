@@ -77,7 +77,18 @@ def search_product_zenserp(query: str, site: str = "amazon.com"):
         results = response.json()
         if "shopping_results" in results:
             sorted_results = sorted(results["shopping_results"], key=lambda x: float(x.get("price", "0").replace("$", "")))
-            return sorted_results[0]["link"] if sorted_results else None
+            return sorted_results[0] if sorted_results else None
+    return None
+
+# ✅ دالة لتحليل السعر في الرابط
+def extract_price_from_url(url: str):
+    response = requests.get(url)
+    if response.status_code == 200:
+        # هنا يمكننا استخراج السعر من الرابط عن طريق تحليل الصفحة (مثال: باستخدام BeautifulSoup)
+        # ده مجرد placeholder: هنفترض إننا استخرجنا السعر بنجاح من الصفحة
+        price = 0.0  # سعر افتراضي
+        # تحليل الصفحة لاستخراج السعر الحقيقي سيحتاج مكتبة مثل BeautifulSoup
+        return price
     return None
 
 # ✅ Endpoint رئيسي
@@ -91,13 +102,14 @@ async def predict_price(item: Item):
 
     if state == "new":
         # بحث في أمازون وشين
-        amazon_link = search_product_zenserp(search_query, site="amazon.com")
-        shein_link = search_product_zenserp(search_query, site="shein.com")
-        product_url = amazon_link or shein_link
+        amazon_product = search_product_zenserp(search_query, site="amazon.com")
+        shein_product = search_product_zenserp(search_query, site="shein.com")
+        product_url = amazon_product or shein_product
     elif state == "used":
         # بحث في eBay
         product_url = search_product_zenserp(search_query, site="ebay.com")
 
+    # إذا كانت البيانات موجودة في قاعدة البيانات
     if dataset_price is not None:
         return {
             "predicted_price": dataset_price,
@@ -105,6 +117,7 @@ async def predict_price(item: Item):
             "product_url": product_url
         }
 
+    # التنبؤ بالسعر من الموديل
     try:
         input_data = [
             encoders['type'].transform([item.type.lower()])[0],
@@ -119,6 +132,19 @@ async def predict_price(item: Item):
 
     predicted_price = model.predict([input_data])[0]
 
+    # إذا وجدنا رابط من Zenserp، قارن السعر المتوقع مع السعر الذي وجدناه
+    if product_url:
+        price_from_url = extract_price_from_url(product_url)
+        if price_from_url:
+            price_diff = abs(predicted_price - price_from_url)
+            if price_diff < 10:  # فرق السعر مسموح به (مثلاً أقل من 10 دولارات)
+                return {
+                    "predicted_price": predicted_price,
+                    "source": "model",
+                    "product_url": product_url,
+                    "price_diff": price_diff
+                }
+    
     return {
         "predicted_price": predicted_price,
         "source": "model",
