@@ -88,7 +88,7 @@ async def predict_price(item: Item):
     dataset_price = get_price_from_db(item)
 
     # 🔍 تجهيز بيانات البحث
-    search_query = f"{item.brand} {item.color} {item.material} {item.style} {item.type}".strip()
+    search_query = f"{item.type} {item.color} {item.brand} {item.style} {item.material}".strip()
     query_encoded = search_query.replace(" ", "+")
     state = item.state.lower()
 
