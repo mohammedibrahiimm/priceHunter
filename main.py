@@ -59,71 +59,112 @@ def get_price_from_db(item: Item):
         return sum(prices) / len(prices)
     return None
 
-# ✅ دالة جلب رابط منتج من Zenserp
-def search_product_zenserp(query: str, site: str = "amazon.com"):
-    url = "https://app.zenserp.com/api/v2/search"
-    params = {
-        "q": query,
-        "location": "United States",
-        "search_engine": "google.com",
-        "tbm": "shop",
-        "num": 5,
-        "domain": site,
-        "apikey": "3c0ce450-1c63-11f0-b37b-9f198730fcec"
-    }
+# ✅ دالة للبحث في مواقع متعددة وجلب النتائج
+def search_multiple_products(query: str, sites: list):
+    all_results = []
 
-    response = requests.get(url, params=params)
-    if response.status_code == 200:
-        results = response.json()
-        if "shopping_results" in results:
-            sorted_results = sorted(results["shopping_results"], key=lambda x: float(x.get("price", "0").replace("$", "")))
-            return sorted_results[0]["link"] if sorted_results else None
-    return None
+    for site in sites:
+        try:
+            print(f"🔍 Searching for: {query} on {site}")
+            url = "https://app.zenserp.com/api/v2/search"
+            params = {
+                "q": query,
+                "location": "United States",
+                "search_engine": "google.com",
+                "tbm": "shop",
+                "num": 5,
+                "domain": site,
+                "apikey": "3c0ce450-1c63-11f0-b37b-9f198730fcec"
+            }
+
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+
+            results = response.json()
+            if "shopping_results" in results:
+                filtered = [
+                    r for r in results["shopping_results"]
+                    if "goinggoinggone" not in r.get("link", "").lower()
+                ]
+                all_results.extend(filtered)
+        except Exception as e:
+            print(f"❌ Error while searching {site}: {e}")
+
+    try:
+        sorted_results = sorted(
+            all_results,
+            key=lambda x: float(x.get("price", "0").replace("$", "").replace(",", ""))
+        )
+        return sorted_results
+    except Exception as e:
+        print(f"❌ Error while sorting results: {e}")
+        return []
 
 # ✅ Endpoint رئيسي
 @app.post("/predict_price/")
 async def predict_price(item: Item):
-    dataset_price = get_price_from_db(item)
+    try:
+        dataset_price = get_price_from_db(item)
+        search_query = f"{item.brand} {item.color} {item.material} {item.style} {item.type}"
+        state = item.state.lower()
 
-    search_query = f"{item.brand} {item.color} {item.material} {item.style} {item.type}"
-    state = item.state.lower()
-    product_url = None
+        cheapest_link = None
+        extra_links = {}
 
-    if state == "new":
-        # بحث في أمازون وشين
-        amazon_link = search_product_zenserp(search_query, site="amazon.com")
-        shein_link = search_product_zenserp(search_query, site="shein.com")
-        product_url = amazon_link or shein_link
-    elif state == "used":
-        # بحث في eBay
-        product_url = search_product_zenserp(search_query, site="ebay.com")
+        if state == "new":
+            results = search_multiple_products(search_query, ["amazon.com", "shein.com"])
+            if results:
+                cheapest_link = results[0].get("link")
+                for r in results:
+                    link = r.get("link", "")
+                    if "amazon" in link and "amazon_url" not in extra_links:
+                        extra_links["amazon_url"] = link
+                    elif "shein" in link and "shein_url" not in extra_links:
+                        extra_links["shein_url"] = link
 
-    if dataset_price is not None:
+        elif state == "used":
+            results = search_multiple_products(search_query, ["ebay.com"])
+            if results:
+                cheapest_link = results[0].get("link")
+                for r in results:
+                    link = r.get("link", "")
+                    if "ebay" in link and "ebay_url" not in extra_links:
+                        extra_links["ebay_url"] = link
+
+        if dataset_price is not None:
+            return {
+                "predicted_price": dataset_price,
+                "source": "database",
+                "product_url": cheapest_link,
+                **extra_links
+            }
+
+        # Model prediction
+        try:
+            input_data = [
+                encoders['type'].transform([item.type.lower()])[0],
+                encoders['color'].transform([item.color.lower()])[0],
+                encoders['brand'].transform([item.brand.lower()])[0],
+                encoders['material'].transform([item.material.lower()])[0],
+                encoders['style'].transform([item.style.lower()])[0],
+                encoders['state'].transform([item.state.lower()])[0]
+            ]
+        except Exception as e:
+            print(f"❌ Encoding Error: {e}")
+            return {"error": f"Invalid value: {str(e)}"}
+
+        predicted_price = model.predict([input_data])[0]
+
         return {
-            "predicted_price": dataset_price,
-            "source": "database",
-            "product_url": product_url
+            "predicted_price": predicted_price,
+            "source": "model",
+            "product_url": cheapest_link,
+            **extra_links
         }
 
-    try:
-        input_data = [
-            encoders['type'].transform([item.type.lower()])[0],
-            encoders['color'].transform([item.color.lower()])[0],
-            encoders['brand'].transform([item.brand.lower()])[0],
-            encoders['material'].transform([item.material.lower()])[0],
-            encoders['style'].transform([item.style.lower()])[0],
-            encoders['state'].transform([item.state.lower()])[0]
-        ]
     except Exception as e:
-        return {"error": f"Invalid value: {str(e)}"}
-
-    predicted_price = model.predict([input_data])[0]
-
-    return {
-        "predicted_price": predicted_price,
-        "source": "model",
-        "product_url": product_url
-    }
+        print(f"❌ General Error: {e}")
+        return {"error": f"Internal Server Error: {str(e)}"}
 
 # ✅ لتشغيل التطبيق
 if __name__ == "__main__":
