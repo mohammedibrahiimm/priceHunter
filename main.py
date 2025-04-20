@@ -104,7 +104,7 @@ async def predict_price(item: Item):
     }
 
     if state == "new":
-       product_urls["shein_search_link"] = shein_link
+       product_urls["shein_search_link"] = f"https://www.google.com/search?q=site:shein.com+{query_encoded}"
     elif state == "used":
         product_urls["ebay_search_link"] = ebay_link
 
