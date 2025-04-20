@@ -68,7 +68,7 @@ def get_lowest_price_link(query: str):
         "search_engine": "google.com",
         "tbm": "shop",
         "num": 5,
-        "apikey": "3c0ce450-1c63-11f0-b37b-9f198730fcec"
+        "apikey": "2376c9b0-1dd4-11f0-a27c-4da665a28829"
     }
 
     try:
