@@ -18,7 +18,7 @@ encoders = joblib.load(ENCODERS_PATH)
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[""],
+    allow_origins=["http://localhost:5122"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -38,18 +38,18 @@ class Item(BaseModel):
     state: str
 
 official_store_links = {
-    "h&m": "",
-    "zara": "",
-    "levis": "",
-    "adidas": "",
-    "forever21": "",
-    "gucci": "",
-    "pull&bear": "",
-    "nike": "",
-    "armani": "",
-    "dior": "",
-    "gap": "",
-    "lacoste": ""
+    "h&m": "https://www2.hm.com",
+    "zara": "https://www.zara.com",
+    "levis": "https://www.levi.com",
+    "adidas": "https://www.adidas.com",
+    "forever21": "https://www.forever21.com",
+    "gucci": "https://www.gucci.com",
+    "pull&bear": "https://www.pullandbear.com",
+    "nike": "https://www.nike.com",
+    "armani": "https://www.armani.com",
+    "dior": "https://www.dior.com",
+    "gap": "https://www.gap.com",
+    "lacoste": "https://www.lacoste.com"
 }
 
 def get_price_from_db(item: Item):
@@ -69,7 +69,7 @@ def get_price_from_db(item: Item):
     return None
 
 def get_lowest_price_link(query: str):
-    url = ""
+    url = "https://app.zenserp.com/api/v2/search"
     params = {
         "q": query,
         "location": "United States",
@@ -99,9 +99,9 @@ async def predict_price(item: Item):
     state = item.state.lower()
     brand = item.brand.lower()
 
-    amazon_link = f""
-    shein_link = f""
-    ebay_link = f""
+    amazon_link = f"https://www.amazon.com/s?k={query_encoded}"
+    shein_link = f"https://www.shein.com/search?q={query_encoded}"
+    ebay_link = f"https://www.ebay.com/sch/i.html?_nkw={query_encoded}"
     lowest_price = get_lowest_price_link(search_query)
 
     product_urls = {
