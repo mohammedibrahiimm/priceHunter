@@ -72,12 +72,24 @@ def get_lowest_price_link(query: str):
         return None
     return None
 
+BRAND_STORES = {
+    "nike": "https://www.nike.com/w?q={query}",
+    "adidas": "https://www.adidas.com/us/search?q={query}",
+    "zara": "https://www.zara.com/us/en/search?searchTerm={query}",
+    "hm": "https://www2.hm.com/en_us/search-results.html?q={query}",
+    "uniqlo": "https://www.uniqlo.com/us/en/search?q={query}",
+    "shein": "https://www.shein.com/search?q={query}",
+    "puma": "https://us.puma.com/us/en/search?q={query}",
+    "under armour": "https://www.underarmour.com/en-us/search?q={query}"
+}
+
 @app.post("/predict_price/")
 async def predict_price(item: Item):
     dataset_price = get_price_from_db(item)
     search_query = f"{item.type} {item.color} {item.brand} {item.style} {item.material}".strip()
     query_encoded = search_query.replace(" ", "+")
     state = item.state.lower()
+    brand_key = item.brand.lower()
 
     amazon_link = f"https://www.amazon.com/s?k={query_encoded}"
     shein_link = f"https://www.shein.com/search?q={query_encoded}"
@@ -93,8 +105,10 @@ async def predict_price(item: Item):
     elif state == "used":
         product_urls["ebay_search_link"] = ebay_link
 
-    brand_site_link = f"https://www.google.com/search?q=site:{item.brand.lower()}.com+{query_encoded}"
-    product_urls["brand_site_link"] = brand_site_link
+    if brand_key in BRAND_STORES:
+        product_urls["brand_store_link"] = BRAND_STORES[brand_key].format(query=query_encoded)
+    else:
+        product_urls["brand_store_link"] = f"https://www.google.com/search?q=site:{brand_key}.com+{query_encoded}"
 
     if dataset_price is not None:
         return {
