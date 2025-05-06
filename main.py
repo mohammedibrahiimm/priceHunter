@@ -37,21 +37,6 @@ class Item(BaseModel):
     style: str
     state: str
 
-official_store_links = {
-    "h&m": "https://www2.hm.com",
-    "zara": "https://www.zara.com",
-    "levis": "https://www.levi.com",
-    "adidas": "https://www.adidas.com",
-    "forever21": "https://www.forever21.com",
-    "gucci": "https://www.gucci.com",
-    "pull&bear": "https://www.pullandbear.com",
-    "nike": "https://www.nike.com",
-    "armani": "https://www.armani.com",
-    "dior": "https://www.dior.com",
-    "gap": "https://www.gap.com",
-    "lacoste": "https://www.lacoste.com"
-}
-
 def get_price_from_db(item: Item):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -90,6 +75,23 @@ def get_lowest_price_link(query: str):
         return None
     return None
 
+def get_official_store_link(brand: str):
+    official_links = {
+        "h&m": "https://www2.hm.com",
+        "zara": "https://www.zara.com",
+        "levis": "https://www.levi.com",
+        "adidas": "https://www.adidas.com",
+        "forever21": "https://www.forever21.com",
+        "gucci": "https://www.gucci.com",
+        "pull&bear": "https://www.pullandbear.com",
+        "nike": "https://www.nike.com",
+        "armani": "https://www.armani.com",
+        "dior": "https://www.dior.com",
+        "gap": "https://www.gap.com",
+        "lacoste": "https://www.lacoste.com",
+    }
+    return official_links.get(brand.lower())
+
 @app.post("/predict_price/")
 async def predict_price(item: Item):
     dataset_price = get_price_from_db(item)
@@ -97,21 +99,20 @@ async def predict_price(item: Item):
     search_query = f"{item.type} {item.color} {item.brand} {item.style} {item.material}".strip()
     query_encoded = search_query.replace(" ", "+")
     state = item.state.lower()
-    brand = item.brand.lower()
 
     amazon_link = f"https://www.amazon.com/s?k={query_encoded}"
     shein_link = f"https://www.shein.com/search?q={query_encoded}"
     ebay_link = f"https://www.ebay.com/sch/i.html?_nkw={query_encoded}"
-    lowest_price = get_lowest_price_link(search_query)
+    official_store_link = get_official_store_link(item.brand)
 
     product_urls = {
-        "lowest_price_link": lowest_price
+        "lowest_price_link": get_lowest_price_link(search_query),
     }
 
     if state == "new":
         product_urls["amazon_search_link"] = amazon_link
-        if brand in official_store_links:
-            product_urls["official_store_link"] = official_store_links[brand]
+        if official_store_link:
+            product_urls["official_store_link"] = official_store_link
     elif state == "used":
         product_urls["ebay_search_link"] = ebay_link
         product_urls["shein_search_link"] = shein_link
