@@ -75,22 +75,17 @@ def get_lowest_price_link(query: str):
         return None
     return None
 
-def get_official_store_link(brand: str):
-    official_links = {
-        "h&m": "https://www2.hm.com",
-        "zara": "https://www.zara.com",
-        "levis": "https://www.levi.com",
-        "adidas": "https://www.adidas.com",
-        "forever21": "https://www.forever21.com",
-        "gucci": "https://www.gucci.com",
-        "pull&bear": "https://www.pullandbear.com",
-        "nike": "https://www.nike.com",
-        "armani": "https://www.armani.com",
-        "dior": "https://www.dior.com",
-        "gap": "https://www.gap.com",
-        "lacoste": "https://www.lacoste.com",
-    }
-    return official_links.get(brand.lower())
+# روابط البحث داخل الستورات الرسمية
+official_store_search_links = {
+    "adidas": "https://www.adidas.com/us/search?q=",
+    "nike": "https://www.nike.com/w?q=",
+    "hm": "https://www2.hm.com/en_us/search-results.html?q=",
+    "zara": "https://www.zara.com/us/en/search?searchTerm=",
+    "shein": "https://www.shein.com/search?q=",
+    "gucci": "https://www.gucci.com/us/en/search?searchTerm=",
+    "puma": "https://us.puma.com/us/en/search?q=",
+    "uniqlo": "https://www.uniqlo.com/us/en/search?q=",
+}
 
 @app.post("/predict_price/")
 async def predict_price(item: Item):
@@ -99,23 +94,39 @@ async def predict_price(item: Item):
     search_query = f"{item.type} {item.color} {item.brand} {item.style} {item.material}".strip()
     query_encoded = search_query.replace(" ", "+")
     state = item.state.lower()
+    brand_lower = item.brand.lower()
 
     amazon_link = f"https://www.amazon.com/s?k={query_encoded}"
     shein_link = f"https://www.shein.com/search?q={query_encoded}"
     ebay_link = f"https://www.ebay.com/sch/i.html?_nkw={query_encoded}"
-    official_store_link = get_official_store_link(item.brand)
+    official_store_link = None
+
+    if brand_lower in official_store_search_links:
+        official_store_link = official_store_search_links[brand_lower] + query_encoded
 
     product_urls = {
         "lowest_price_link": get_lowest_price_link(search_query),
     }
 
     if state == "new":
-        product_urls["amazon_search_link"] = amazon_link
+        product_urls["amazon"] = {
+            "label": "Search on Amazon",
+            "url": amazon_link
+        }
         if official_store_link:
-            product_urls["official_store_link"] = official_store_link
+            product_urls["official_store"] = {
+                "label": f"Search on {item.brand.title()} Official Store",
+                "url": official_store_link
+            }
     elif state == "used":
-        product_urls["ebay_search_link"] = ebay_link
-        product_urls["shein_search_link"] = shein_link
+        product_urls["ebay"] = {
+            "label": "Search on eBay",
+            "url": ebay_link
+        }
+        product_urls["shein"] = {
+            "label": "Search on Shein",
+            "url": shein_link
+        }
 
     if dataset_price is not None:
         return {
