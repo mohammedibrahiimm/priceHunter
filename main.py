@@ -78,7 +78,7 @@ def get_lowest_price_link(query: str):
 official_store_search_links = {
     "adidas": "https://www.adidas.com/us/search?q=",
     "nike": "https://www.nike.com/w?q=",
-    "hm": "https://www2.hm.com/en_us/search-results.html?q=",
+    "h&m": "https://www2.hm.com/en_us/search-results.html?q=",
     "zara": "https://www.zara.com/us/en/search?searchTerm=",
     "shein": "https://www.shein.com/search?q=",
     "gucci": "https://www.gucci.com/us/en/search?searchTerm=",
