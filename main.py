@@ -18,7 +18,7 @@ encoders = joblib.load(ENCODERS_PATH)
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5122"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -108,24 +108,12 @@ async def predict_price(item: Item):
     }
 
     if state == "new":
-        product_urls["amazon"] = {
-            "label": "Search on Amazon",
-            "url": amazon_link
-        }
+        product_urls["amazon"] = amazon_link
         if official_store_link:
-            product_urls["official_store"] = {
-                "label": f"Search on {item.brand.title()} Official Store",
-                "url": official_store_link
-            }
+            product_urls["official_store"] = official_store_link
     elif state == "used":
-        product_urls["ebay"] = {
-            "label": "Search on eBay",
-            "url": ebay_link
-        }
-        product_urls["shein"] = {
-            "label": "Search on Shein",
-            "url": shein_link
-        }
+        product_urls["ebay"] = ebay_link
+        product_urls["shein"] = shein_link
 
     if dataset_price is not None:
         return {
