@@ -82,8 +82,13 @@ official_store_search_links = {
     "zara": "https://www.zara.com/us/en/search?searchTerm=",
     "shein": "https://www.shein.com/search?q=",
     "gucci": "https://www.gucci.com/us/en/search?searchTerm=",
-    "puma": "https://us.puma.com/us/en/search?q=",
-    "uniqlo": "https://www.uniqlo.com/us/en/search?q=",
+    "dior": "https://www.dior.com/en_us/fashion/search/",
+    "forever21": "https://www.forever21.com/us/shop/search.html?q=",
+    "pull&bear": "https://www.pullandbear.com/us/search?term=",
+    "armani": "https://www.armani.com/en-us/search?q=",
+    "lacoste": "https://www.lacoste.com/us/search/?q=",
+    "gap": "https://www.gap.com/browse/search.do?searchText=",
+    "levis": "https://www.levi.com/US/en_US/search?q="
 }
 
 @app.post("/predict_price/")
@@ -117,7 +122,7 @@ async def predict_price(item: Item):
 
     if dataset_price is not None:
         return {
-            "predicted_price": dataset_price,
+            "predicted_price": round(dataset_price, 2),
             "source": "database",
             "product_urls": product_urls
         }
@@ -137,7 +142,7 @@ async def predict_price(item: Item):
     predicted_price = model.predict([input_data])[0]
 
     return {
-        "predicted_price": predicted_price,
+        "predicted_price": round(predicted_price, 2),
         "source": "model",
         "product_urls": product_urls
     }
