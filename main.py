@@ -18,7 +18,7 @@ encoders = joblib.load(ENCODERS_PATH)
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5122"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -75,7 +75,6 @@ def get_lowest_price_link(query: str):
         return None
     return None
 
-# روابط البحث داخل الستورات الرسمية
 official_store_search_links = {
     "adidas": "https://www.adidas.com/us/search?q=",
     "nike": "https://www.nike.com/w?q=",
