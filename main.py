@@ -66,12 +66,14 @@ def get_lowest_price_link(query: str):
 
     try:
         response = requests.get(url, params=params)
+        print("Zenserp response:", response.text)
         if response.status_code == 200:
             results = response.json()
             if "shopping_results" in results:
                 sorted_results = sorted(results["shopping_results"], key=lambda x: float(x.get("price", "0").replace("$", "")))
                 return sorted_results[0]["link"] if sorted_results else None
-    except:
+    except Exception as e:
+        print("Error:", e)
         return None
     return None
 
