@@ -70,8 +70,25 @@ def get_lowest_price_link(query: str):
         if response.status_code == 200:
             results = response.json()
             if "shopping_results" in results:
-                sorted_results = sorted(results["shopping_results"], key=lambda x: float(x.get("price", "0").replace("$", "")))
-                return sorted_results[0]["link"] if sorted_results else None
+                valid_results = []
+                for item in results["shopping_results"]:
+                    price = None
+                    if "price_parsed" in item and "value" in item["price_parsed"]:
+                        try:
+                            price = float(item["price_parsed"]["value"])
+                        except:
+                            pass
+                    elif "price" in item:
+                        try:
+                            price_str = item["price"].replace("$", "").split("$")[0]
+                            price = float(price_str)
+                        except:
+                            pass
+                    if price is not None:
+                        valid_results.append((price, item["link"]))
+                if valid_results:
+                    valid_results.sort(key=lambda x: x[0])
+                    return valid_results[0][1]
     except Exception as e:
         print("Error:", e)
         return None
